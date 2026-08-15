@@ -6,6 +6,7 @@ enum WordLookupError: LocalizedError {
     case emptyResponse
     case decodingFailed
     case invalidAdditionalRequestBody
+    case providerRejectedRequest(statusCode: Int, message: String?)
     case invalidWordSuggestion(String?)
     case unexpectedPartOfSpeech(expected: PartOfSpeech, actual: PartOfSpeech)
 
@@ -21,6 +22,11 @@ enum WordLookupError: LocalizedError {
             return "無法解析 LLM 返回的卡片 JSON。"
         case .invalidAdditionalRequestBody:
             return "額外請求內容必須是有效的 JSON object。"
+        case .providerRejectedRequest(let statusCode, let message):
+            if let message, !message.isEmpty {
+                return "Provider 拒絕了請求（HTTP \(statusCode)）：\(message)"
+            }
+            return "Provider 拒絕了請求（HTTP \(statusCode)）。請檢查 Settings 裡的 endpoint、model 和 API key。"
         case .invalidWordSuggestion(let suggestion):
             if let suggestion, !suggestion.isEmpty {
                 return "這看起來不像有效德語詞。你是不是想查：\(suggestion)？"
@@ -84,7 +90,7 @@ final class LLMWordClient {
                     content: lookupInstruction(for: word, requestedPartOfSpeech: requestedPartOfSpeech)
                 )
             ],
-            temperature: 0.1,
+            temperature: 1.0,
             response_format: ResponseFormat(type: "json_object")
         )
         request.httpBody = try mergedRequestBody(
@@ -92,8 +98,13 @@ final class LLMWordClient {
             additionalRequestBody: configuration.additionalRequestBody
         )
 
-        let (data, _) = try await URLSession.shared.data(for: request)
-        let envelope = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
+        let data = try await responseData(for: request)
+        let envelope: ChatCompletionResponse
+        do {
+            envelope = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
+        } catch {
+            throw WordLookupError.decodingFailed
+        }
         guard let text = envelope.choices.first?.message.content, !text.isEmpty else {
             throw WordLookupError.emptyResponse
         }
@@ -123,8 +134,13 @@ final class LLMWordClient {
             GeminiContent(parts: [GeminiPart(text: "\(systemPrompt)\n\n\(lookupText)")])
         ]))
 
-        let (data, _) = try await URLSession.shared.data(for: request)
-        let envelope = try JSONDecoder().decode(GeminiResponse.self, from: data)
+        let data = try await responseData(for: request)
+        let envelope: GeminiResponse
+        do {
+            envelope = try JSONDecoder().decode(GeminiResponse.self, from: data)
+        } catch {
+            throw WordLookupError.decodingFailed
+        }
         guard let text = envelope.candidates.first?.content.parts.first?.text, !text.isEmpty else {
             throw WordLookupError.emptyResponse
         }
@@ -149,6 +165,29 @@ final class LLMWordClient {
             throw WordLookupError.invalidURL
         }
         return url
+    }
+
+    private func responseData(for request: URLRequest) async throws -> Data {
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else { return data }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw WordLookupError.providerRejectedRequest(
+                statusCode: httpResponse.statusCode,
+                message: providerErrorMessage(from: data)
+            )
+        }
+        return data
+    }
+
+    private func providerErrorMessage(from data: Data) -> String? {
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let error = object["error"] as? [String: Any],
+            let message = error["message"] as? String
+        else {
+            return nil
+        }
+        return String(message.prefix(240))
     }
 
     private func mergedRequestBody(

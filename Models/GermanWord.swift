@@ -187,7 +187,7 @@ enum LLMProvider: String, CaseIterable, Identifiable {
     var defaultModel: String {
         switch self {
         case .openAICompatible:
-            return "gpt-4.1-mini"
+            return "gpt-5.6-luna"
         case .gemini:
             return "gemini-2.5-flash"
         case .custom:
