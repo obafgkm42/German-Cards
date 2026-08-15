@@ -37,41 +37,40 @@ struct CardLibraryView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Picker("Sort", selection: $sortOrder) {
-                        ForEach(CardSortOrder.allCases) { order in
-                            Text(order.title).tag(order)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+        #if os(macOS)
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Manage Cards")
+                        .font(.title2.weight(.semibold))
+                    Text("\(displayedCards.count) cards")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
+                Spacer()
+                TextField("Search words or meanings", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 260)
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(20)
 
-                ForEach(displayedCards) { card in
-                    Button {
-                        editingCard = card
-                    } label: {
-                        CardLibraryRow(card: card)
-                    }
-                    .buttonStyle(.plain)
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            store.delete(card)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
-                .onDelete(perform: deleteSortedCards)
-            }
-            .overlay {
-                if store.history.isEmpty {
-                    ContentUnavailableView("No cards", systemImage: "rectangle.stack", description: Text("Generated cards will appear here."))
-                } else if displayedCards.isEmpty {
-                    ContentUnavailableView.search(text: searchText)
-                }
-            }
+            Divider()
+            libraryList
+        }
+        .frame(
+            minWidth: 600,
+            idealWidth: 640,
+            minHeight: 520,
+            idealHeight: 620
+        )
+        .sheet(item: $editingCard) { card in
+            CardEditView(store: store, card: card)
+        }
+        #else
+        NavigationStack {
+            libraryList
             .navigationTitle("Manage Cards")
             .searchable(text: $searchText, prompt: "Search words or meanings")
             .toolbar {
@@ -81,6 +80,44 @@ struct CardLibraryView: View {
             }
             .sheet(item: $editingCard) { card in
                 CardEditView(store: store, card: card)
+            }
+        }
+        #endif
+    }
+
+    private var libraryList: some View {
+        List {
+            Section {
+                Picker("Sort", selection: $sortOrder) {
+                    ForEach(CardSortOrder.allCases) { order in
+                        Text(order.title).tag(order)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            ForEach(displayedCards) { card in
+                Button {
+                    editingCard = card
+                } label: {
+                    CardLibraryRow(card: card)
+                }
+                .buttonStyle(.plain)
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        store.delete(card)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
+            .onDelete(perform: deleteSortedCards)
+        }
+        .overlay {
+            if store.history.isEmpty {
+                ContentUnavailableView("No cards", systemImage: "rectangle.stack", description: Text("Generated cards will appear here."))
+            } else if displayedCards.isEmpty {
+                ContentUnavailableView.search(text: searchText)
             }
         }
     }

@@ -32,12 +32,6 @@ struct SearchView: View {
         #if os(macOS)
         searchContent
             .navigationTitle("Cards")
-            .searchable(
-                text: $query,
-                placement: .toolbar,
-                prompt: "German, English, or Chinese word"
-            )
-            .onSubmit(of: .search) { Task { await search() } }
             .toolbar { macToolbar }
             .sheet(isPresented: $showingLibrary) {
                 CardLibraryView(store: store)
@@ -80,16 +74,33 @@ struct SearchView: View {
     #if os(macOS)
     @ToolbarContentBuilder
     private var macToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Picker("Part of Speech", selection: $requestedPartOfSpeech) {
-                Text("Automatic").tag(nil as PartOfSpeech?)
-                ForEach(PartOfSpeech.allCases) { option in
-                    Text(option.label).tag(Optional(option))
+        ToolbarItem(placement: .primaryAction) {
+            HStack(spacing: 8) {
+                Button {
+                    Task { await search() }
+                } label: {
+                    Label(
+                        isLoading ? "Generating Card" : "Generate Card",
+                        systemImage: isLoading ? "hourglass" : "sparkles"
+                    )
                 }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    isLoading ||
+                    query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+                .help(isLoading ? "Generating card…" : "Generate card")
+                .accessibilityLabel(isLoading ? "Generating card" : "Generate card")
+
+                MacSearchField(
+                    text: $query,
+                    prompt: "German, English, or Chinese word"
+                ) {
+                    Task { await search() }
+                }
+                .frame(width: 250)
             }
-            .pickerStyle(.menu)
-            .frame(width: 118)
-            .help("Choose the part of speech for this lookup")
         }
     }
     #endif
@@ -158,6 +169,17 @@ struct SearchView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppTheme.primaryText)
             Spacer()
+            #if os(macOS)
+            Picker("Part of Speech", selection: $requestedPartOfSpeech) {
+                Text("Automatic").tag(nil as PartOfSpeech?)
+                ForEach(PartOfSpeech.allCases) { option in
+                    Text(option.label).tag(Optional(option))
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 118)
+            .help("Choose the part of speech for this lookup")
+            #endif
             Text(store.storageDescription)
                 .font(.caption)
                 .foregroundStyle(AppTheme.secondaryText)
