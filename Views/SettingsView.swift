@@ -60,9 +60,21 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        #if os(macOS)
+        settingsPage
+            .frame(width: 560, height: 680)
+            .preferredColorScheme((AppAppearance(rawValue: appearanceRaw) ?? .system).colorScheme)
+        #else
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+            settingsPage
+                .navigationTitle("Settings")
+        }
+        #endif
+    }
+
+    private var settingsPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
                     SettingsSection(
                         title: "Display",
                         footer: "Appearance follows the system by default. Grammar copy can be switched independently from the device language."
@@ -218,43 +230,41 @@ struct SettingsView: View {
                             CEFRProgressRow(level: "C1", target: 8000, current: store.count)
                         }
                     }
-                }
-                .frame(maxWidth: 760, alignment: .leading)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 18)
             }
-            .background(AppTheme.background)
-            .navigationTitle("Settings")
-            .fileExporter(
-                isPresented: $isExportingDictionary,
-                document: dictionaryDocument,
-                contentType: .json,
-                defaultFilename: "GermanCardsDictionary"
-            ) { result in
-                switch result {
-                case .success:
-                    dictionaryTransferStatus = "Dictionary exported."
-                case .failure(let error):
-                    dictionaryTransferStatus = "Export failed: \(error.localizedDescription)"
-                }
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+        }
+        .background(AppTheme.background)
+        .fileExporter(
+            isPresented: $isExportingDictionary,
+            document: dictionaryDocument,
+            contentType: .json,
+            defaultFilename: "GermanCardsDictionary"
+        ) { result in
+            switch result {
+            case .success:
+                dictionaryTransferStatus = "Dictionary exported."
+            case .failure(let error):
+                dictionaryTransferStatus = "Export failed: \(error.localizedDescription)"
             }
-            .fileImporter(isPresented: $isImportingDictionary, allowedContentTypes: [.json]) { result in
-                importDictionary(result)
+        }
+        .fileImporter(isPresented: $isImportingDictionary, allowedContentTypes: [.json]) { result in
+            importDictionary(result)
+        }
+        .onAppear(perform: loadConfigurationDrafts)
+        .confirmationDialog(
+            "Force renew all cards?",
+            isPresented: $showingForceRenewConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Renew All Cards", role: .destructive) {
+                Task { await renewExistingCards(forceAll: true) }
             }
-            .onAppear(perform: loadConfigurationDrafts)
-            .confirmationDialog(
-                "Force renew all cards?",
-                isPresented: $showingForceRenewConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Renew All Cards", role: .destructive) {
-                    Task { await renewExistingCards(forceAll: true) }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This will call the LLM once for every saved card, even cards that already have the current fields.")
-            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will call the LLM once for every saved card, even cards that already have the current fields.")
         }
     }
 

@@ -19,6 +19,9 @@ struct SearchView: View {
     @State private var requestedPartOfSpeech: PartOfSpeech?
     @FocusState private var isSearchFocused: Bool
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #if os(macOS)
+    @Environment(\.openSettings) private var openSettings
+    #endif
 
     private let client = LLMWordClient()
     private let activeCardScrollID = "active-card"
@@ -26,30 +29,70 @@ struct SearchView: View {
     private var deck: [GermanWordData] { store.history }
 
     var body: some View {
-        NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 18) {
-                        searchBar
-                        dictionarySummary
-                        normalizedLookupBanner
-                        statusContent {
-                            scrollActiveCard(with: proxy)
-                        }
-                        .id(activeCardScrollID)
-                    }
-                    .padding(18)
-                }
-                .background(AppTheme.background)
-                .scrollDismissesKeyboard(.interactively)
-                .onTapGesture { isSearchFocused = false }
+        #if os(macOS)
+        searchContent
+            .navigationTitle("Cards")
+            .searchable(
+                text: $query,
+                placement: .toolbar,
+                prompt: "German, English, or Chinese word"
+            )
+            .onSubmit(of: .search) { Task { await search() } }
+            .toolbar { macToolbar }
+            .sheet(isPresented: $showingLibrary) {
+                CardLibraryView(store: store)
             }
+        #else
+        NavigationStack {
+            searchContent
             .navigationTitle("Cards")
             .sheet(isPresented: $showingLibrary) {
                 CardLibraryView(store: store)
             }
         }
+        #endif
     }
+
+    private var searchContent: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 18) {
+                    #if !os(macOS)
+                    searchBar
+                    #endif
+                    dictionarySummary
+                    normalizedLookupBanner
+                    statusContent {
+                        scrollActiveCard(with: proxy)
+                    }
+                    .id(activeCardScrollID)
+                }
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
+                .padding(18)
+            }
+            .background(AppTheme.background)
+            .scrollDismissesKeyboard(.interactively)
+            .onTapGesture { isSearchFocused = false }
+        }
+    }
+
+    #if os(macOS)
+    @ToolbarContentBuilder
+    private var macToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Picker("Part of Speech", selection: $requestedPartOfSpeech) {
+                Text("Automatic").tag(nil as PartOfSpeech?)
+                ForEach(PartOfSpeech.allCases) { option in
+                    Text(option.label).tag(Optional(option))
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 118)
+            .help("Choose the part of speech for this lookup")
+        }
+    }
+    #endif
 
     private var searchBar: some View {
         VStack(spacing: 10) {
@@ -160,7 +203,17 @@ struct SearchView: View {
         } else if let suggestion {
             suggestionView(suggestion)
         } else if let errorMessage {
-            ContentUnavailableView("Lookup failed", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+            ContentUnavailableView {
+                Label("Lookup failed", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(errorMessage)
+            } actions: {
+                #if os(macOS)
+                Button("Open Settings") {
+                    openSettings()
+                }
+                #endif
+            }
         } else if let selectedWord {
             CardDeckView(
                 deck: [selectedWord],
