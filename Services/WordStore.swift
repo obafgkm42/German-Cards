@@ -18,14 +18,21 @@ final class WordStore: ObservableObject {
 
     func findCached(_ word: String, partOfSpeech: PartOfSpeech? = nil) -> GermanWordData? {
         let normalized = normalize(word)
-        return history.first { card in
-            guard partOfSpeech == nil || card.partOfSpeech == partOfSpeech else {
-                return false
-            }
-            return normalize(card.word) == normalized ||
-                matchesNounForm(card, normalized: normalized) ||
-                matchesTranslation(card, normalized: normalized)
+        let eligibleCards = history.filter { card in
+            partOfSpeech == nil || card.partOfSpeech == partOfSpeech
         }
+
+        if let exactMatch = eligibleCards.first(where: { normalize($0.word) == normalized }) {
+            return exactMatch
+        }
+        if let inflectedMatch = eligibleCards.first(where: { matchesNounForm($0, normalized: normalized) }) {
+            return inflectedMatch
+        }
+
+        // German nouns are capitalized. A query such as "Route" must reach the
+        // German lookup instead of being captured by an English gloss on another card.
+        guard shouldUseTranslationCache(for: word) else { return nil }
+        return eligibleCards.first { matchesTranslation($0, normalized: normalized) }
     }
 
     private func matchesNounForm(_ card: GermanWordData, normalized: String) -> Bool {
@@ -153,6 +160,16 @@ final class WordStore: ObservableObject {
         value.unicodeScalars.contains { scalar in
             (0x4E00...0x9FFF).contains(scalar.value)
         }
+    }
+
+    private func shouldUseTranslationCache(for query: String) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !containsCJK(trimmed) else { return true }
+        guard !trimmed.contains(where: { $0.isWhitespace }) else { return true }
+        guard let firstLetter = trimmed.unicodeScalars.first(where: CharacterSet.letters.contains) else {
+            return true
+        }
+        return !CharacterSet.uppercaseLetters.contains(firstLetter)
     }
 }
 
