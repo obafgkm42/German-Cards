@@ -28,6 +28,7 @@ A SwiftUI vocabulary and grammar reference app for German learners. GermanCards 
 ## Highlights
 
 - Build German vocabulary cards with notes, examples, gender, plural forms, and related grammar context.
+- Study an A1–C1 grammar book in Traditional Chinese, Simplified Chinese, or English.
 - Search and review saved cards from a local personal dictionary.
 - Listen to German pronunciation using Apple system voices.
 - Export and import `GermanCardsDictionary.json` for backup, AirDrop transfer, Git storage, or cloud sync.

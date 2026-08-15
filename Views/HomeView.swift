@@ -8,22 +8,105 @@ struct HomeView: View {
     }
 
     var body: some View {
+        #if os(macOS)
+        grammarContent
+            .navigationTitle(text.navigationTitle)
+        #else
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    ArticleTableCard(copy: text)
-                    AdjectiveEndingsCard(copy: text)
-                    PrepositionCard(copy: text)
-                    VerbPositionCard(copy: text)
-                    GenderPatternCard(copy: text)
-                }
-                .padding(18)
-            }
-            .background(AppTheme.background)
+            grammarContent
             .navigationTitle(text.navigationTitle)
         }
+        #endif
     }
 
+    private var grammarContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                GrammarChapterHeader(
+                    title: text.foundationsChapterTitle,
+                    level: text.foundationsChapterLevel,
+                    detail: text.foundationsChapterDetail
+                )
+                ArticleTableCard(copy: text)
+                CaseRolesCard(copy: text)
+                PersonalPronounsCard(copy: text)
+                NounPluralCard(copy: text)
+                GenderPatternCard(copy: text)
+
+                GrammarChapterHeader(
+                    title: text.sentencesChapterTitle,
+                    level: text.sentencesChapterLevel,
+                    detail: text.sentencesChapterDetail
+                )
+                VerbPositionCard(copy: text)
+                ConjunctionCard(copy: text)
+                NegationCard(copy: text)
+                WordOrderCard(copy: text)
+
+                GrammarChapterHeader(
+                    title: text.verbsChapterTitle,
+                    level: text.verbsChapterLevel,
+                    detail: text.verbsChapterDetail
+                )
+                PerfectTenseCard(copy: text)
+                SeparableVerbsCard(copy: text)
+
+                GrammarChapterHeader(
+                    title: text.modifiersChapterTitle,
+                    level: text.modifiersChapterLevel,
+                    detail: text.modifiersChapterDetail
+                )
+                AdjectiveEndingsCard(copy: text)
+                PrepositionCard(copy: text)
+
+                GrammarChapterHeader(
+                    title: text.advancedChapterTitle,
+                    level: text.advancedChapterLevel,
+                    detail: text.advancedChapterDetail
+                )
+                RelativeClausesCard(copy: text)
+                PassiveVoiceCard(copy: text)
+                SubjunctiveTwoCard(copy: text)
+                ReportedSpeechCard(copy: text)
+                InfinitiveClausesCard(copy: text)
+                AdvancedConnectorsCard(copy: text)
+                NominalStyleCard(copy: text)
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(18)
+        }
+        .background(AppTheme.background)
+    }
+}
+
+private struct GrammarChapterHeader: View {
+    let title: String
+    let level: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(AppTheme.primaryText)
+                Spacer()
+                Text(level)
+                    .font(.caption.weight(.bold).monospaced())
+                    .foregroundStyle(AppTheme.brand)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(AppTheme.brand.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+            Text(detail)
+                .font(.footnote)
+                .foregroundStyle(AppTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 8)
+    }
 }
 
 private struct ArticleTableCard: View {
@@ -72,6 +155,50 @@ private struct ArticleTableCard: View {
     }
 }
 
+private struct CaseRolesCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.caseRolesTitle, icon: "person.2.crop.square.stack", tint: .blue) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.nominativeRoleTitle, detail: copy.nominativeRoleDetail)
+                MiniRule(title: copy.accusativeRoleTitle, detail: copy.accusativeRoleDetail)
+                MiniRule(title: copy.dativeRoleTitle, detail: copy.dativeRoleDetail)
+                MiniRule(title: copy.genitiveRoleTitle, detail: copy.genitiveRoleDetail)
+            }
+        }
+    }
+}
+
+private struct PersonalPronounsCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.pronounsTitle, icon: "person.3", tint: .purple) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: "Nominativ", detail: copy.nominativePronouns)
+                MiniRule(title: "Akkusativ", detail: copy.accusativePronouns)
+                MiniRule(title: "Dativ", detail: copy.dativePronouns)
+                MiniRule(title: copy.pronounNoteTitle, detail: copy.pronounNoteDetail)
+            }
+        }
+    }
+}
+
+private struct NounPluralCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.pluralTitle, icon: "square.on.square", tint: .mint) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.pluralLearningTitle, detail: copy.pluralLearningDetail)
+                MiniRule(title: copy.pluralPatternsTitle, detail: copy.pluralPatternsDetail)
+                MiniRule(title: copy.dativePluralTitle, detail: copy.dativePluralDetail)
+            }
+        }
+    }
+}
+
 private struct AdjectiveEndingsCard: View {
     let copy: GrammarCopy
 
@@ -116,6 +243,75 @@ private struct VerbPositionCard: View {
     }
 }
 
+private struct ConjunctionCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.conjunctionTitle, icon: "link", tint: .indigo) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.coordinatingTitle, detail: copy.coordinatingDetail)
+                MiniRule(title: copy.subordinatingTitle, detail: copy.subordinatingDetail)
+                MiniRule(title: copy.connectorAdverbTitle, detail: copy.connectorAdverbDetail)
+            }
+        }
+    }
+}
+
+private struct NegationCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.negationTitle, icon: "nosign", tint: .red) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.keinTitle, detail: copy.keinDetail)
+                MiniRule(title: copy.nichtTitle, detail: copy.nichtDetail)
+                MiniRule(title: copy.dochTitle, detail: copy.dochDetail)
+            }
+        }
+    }
+}
+
+private struct WordOrderCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.wordOrderTitle, icon: "list.number", tint: .brown) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.wordOrderRuleTitle, detail: copy.wordOrderRuleDetail)
+                MiniRule(title: copy.wordOrderExampleTitle, detail: copy.wordOrderExampleDetail)
+            }
+        }
+    }
+}
+
+private struct PerfectTenseCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.perfectTitle, icon: "clock.arrow.circlepath", tint: .orange) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.habenPerfectTitle, detail: copy.habenPerfectDetail)
+                MiniRule(title: copy.seinPerfectTitle, detail: copy.seinPerfectDetail)
+                MiniRule(title: copy.participleTitle, detail: copy.participleDetail)
+            }
+        }
+    }
+}
+
+private struct SeparableVerbsCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.separableTitle, icon: "arrow.left.and.right", tint: .pink) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.separableMainTitle, detail: copy.separableMainDetail)
+                MiniRule(title: copy.separableSubordinateTitle, detail: copy.separableSubordinateDetail)
+                MiniRule(title: copy.separablePerfectTitle, detail: copy.separablePerfectDetail)
+            }
+        }
+    }
+}
+
 private struct GenderPatternCard: View {
     let copy: GrammarCopy
 
@@ -126,6 +322,103 @@ private struct GenderPatternCard: View {
                 MiniRule(title: copy.neuterTitle, detail: "-chen, -lein, substantivierte Infinitive")
                 MiniRule(title: copy.masculineTitle, detail: copy.masculineDetail)
                 MiniRule(title: copy.verifyTitle, detail: copy.verifyDetail)
+            }
+        }
+    }
+}
+
+private struct RelativeClausesCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.relativeTitle, icon: "text.append", tint: .blue) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.relativeAgreementTitle, detail: copy.relativeAgreementDetail)
+                MiniRule(title: copy.relativeCaseTitle, detail: copy.relativeCaseDetail)
+                MiniRule(title: copy.relativeOrderTitle, detail: copy.relativeOrderDetail)
+            }
+        }
+    }
+}
+
+private struct PassiveVoiceCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.passiveTitle, icon: "arrow.trianglehead.2.clockwise.rotate.90", tint: .teal) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.processPassiveTitle, detail: copy.processPassiveDetail)
+                MiniRule(title: copy.statePassiveTitle, detail: copy.statePassiveDetail)
+                MiniRule(title: copy.passiveAlternativesTitle, detail: copy.passiveAlternativesDetail)
+            }
+        }
+    }
+}
+
+private struct SubjunctiveTwoCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.subjunctiveTwoTitle, icon: "cloud", tint: .purple) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.counterfactualTitle, detail: copy.counterfactualDetail)
+                MiniRule(title: copy.politeSubjunctiveTitle, detail: copy.politeSubjunctiveDetail)
+                MiniRule(title: copy.subjunctiveFormTitle, detail: copy.subjunctiveFormDetail)
+            }
+        }
+    }
+}
+
+private struct ReportedSpeechCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.reportedSpeechTitle, icon: "quote.bubble", tint: .cyan) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.reportedSpeechUseTitle, detail: copy.reportedSpeechUseDetail)
+                MiniRule(title: copy.reportedSpeechFallbackTitle, detail: copy.reportedSpeechFallbackDetail)
+            }
+        }
+    }
+}
+
+private struct InfinitiveClausesCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.infinitiveTitle, icon: "arrow.right.to.line", tint: .orange) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.purposeInfinitiveTitle, detail: copy.purposeInfinitiveDetail)
+                MiniRule(title: copy.alternativeInfinitiveTitle, detail: copy.alternativeInfinitiveDetail)
+                MiniRule(title: copy.infinitivePlacementTitle, detail: copy.infinitivePlacementDetail)
+            }
+        }
+    }
+}
+
+private struct AdvancedConnectorsCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.advancedConnectorsTitle, icon: "point.3.connected.trianglepath.dotted", tint: .indigo) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.methodResultTitle, detail: copy.methodResultDetail)
+                MiniRule(title: copy.conditionReasonTitle, detail: copy.conditionReasonDetail)
+                MiniRule(title: copy.pairedConnectorTitle, detail: copy.pairedConnectorDetail)
+            }
+        }
+    }
+}
+
+private struct NominalStyleCard: View {
+    let copy: GrammarCopy
+
+    var body: some View {
+        GrammarCard(title: copy.nominalStyleTitle, icon: "doc.text", tint: .green) {
+            VStack(alignment: .leading, spacing: 12) {
+                MiniRule(title: copy.nominalizationTitle, detail: copy.nominalizationDetail)
+                MiniRule(title: copy.participialAttributeTitle, detail: copy.participialAttributeDetail)
+                MiniRule(title: copy.readabilityTitle, detail: copy.readabilityDetail)
             }
         }
     }
@@ -192,55 +485,6 @@ private struct ChipGroup: View {
                         .clipShape(Capsule())
                 }
             }
-        }
-    }
-}
-
-private struct GrammarCopy {
-    let language: GrammarLanguage
-
-    var navigationTitle: String { value("語法", "语法", "Grammar") }
-    var articlesTitle: String { value("定冠詞 der / die / das", "定冠词 der / die / das", "Definite articles") }
-    var caseLabel: String { value("格", "格", "Case") }
-    var masc: String { value("陽性", "阳性", "Masc") }
-    var fem: String { value("陰性", "阴性", "Fem") }
-    var neut: String { value("中性", "中性", "Neut") }
-    var plural: String { value("複數", "复数", "Plural") }
-    var adjectiveTitle: String { value("形容詞詞尾", "形容词词尾", "Adjective endings") }
-    var weakTitle: String { value("弱變化：der gute Wein", "弱变化：der gute Wein", "Weak: der gute Wein") }
-    var weakDetail: String { value("定冠詞已經標明格和性，形容詞多用 -e 或 -en。", "定冠词已经标明格和性，形容词多用 -e 或 -en。", "The article already marks case and gender, so adjectives mostly take -e or -en.") }
-    var mixedTitle: String { value("混合變化：ein guter Wein", "混合变化：ein guter Wein", "Mixed: ein guter Wein") }
-    var mixedDetail: String { value("ein 類冠詞缺少部分標記，形容詞要補出 -er / -es。", "ein 类冠词缺少部分标记，形容词要补出 -er / -es。", "Ein-words miss some markers, so the adjective supplies -er or -es.") }
-    var strongTitle: String { value("強變化：guter Wein", "强变化：guter Wein", "Strong: guter Wein") }
-    var strongDetail: String { value("沒有冠詞時，形容詞承擔主要格/性標記。", "没有冠词时，形容词承担主要格/性标记。", "Without an article, the adjective carries the main case and gender marker.") }
-    var prepositionTitle: String { value("介詞支配的格", "介词支配的格", "Preposition cases") }
-    var whereTitle: String { value("Wo? / Wohin?", "Wo? / Wohin?", "Wo? / Wohin?") }
-    var whereDetail: String { value("位置問 Wo? 用 Dativ；方向問 Wohin? 用 Akkusativ。", "位置问 Wo? 用 Dativ；方向问 Wohin? 用 Akkusativ。", "Location asks Wo? and takes dative; direction asks Wohin? and takes accusative.") }
-    var verbTitle: String { value("動詞位置", "动词位置", "Verb position") }
-    var mainClauseTitle: String { value("主句", "主句", "Main clause") }
-    var mainClauseDetail: String { value("變位動詞在第 2 位：Heute lerne ich Deutsch.", "变位动词在第 2 位：Heute lerne ich Deutsch.", "The finite verb is second: Heute lerne ich Deutsch.") }
-    var questionTitle: String { value("是/否問句", "是/否问句", "Yes/no question") }
-    var questionDetail: String { value("變位動詞在第 1 位：Lernst du Deutsch?", "变位动词在第 1 位：Lernst du Deutsch?", "The finite verb is first: Lernst du Deutsch?") }
-    var subordinateTitle: String { value("從句", "从句", "Subordinate clause") }
-    var subordinateDetail: String { value("weil / dass 從句中，變位動詞到句末。", "weil / dass 从句中，变位动词到句末。", "With weil or dass, the finite verb moves to the end.") }
-    var modalTitle: String { value("情態動詞", "情态动词", "Modal verbs") }
-    var modalDetail: String { value("情態動詞變位，實義動詞原形放句末。", "情态动词变位，实义动词原形放句末。", "The modal is finite; the main verb stays infinitive at the end.") }
-    var genderTitle: String { value("名詞性別規律", "名词性别规律", "Gender patterns") }
-    var feminineTitle: String { value("常見陰性", "常见阴性", "Usually feminine") }
-    var neuterTitle: String { value("常見中性", "常见中性", "Usually neuter") }
-    var masculineTitle: String { value("常見陽性", "常见阳性", "Often masculine") }
-    var masculineDetail: String { value("星期、月份、季節，以及很多 -er 表人名詞。", "星期、月份、季节，以及很多 -er 表人名词。", "Days, months, seasons, and many -er agent nouns.") }
-    var verifyTitle: String { value("仍需核對", "仍需核对", "Always verify") }
-    var verifyDetail: String { value("複合詞看最後一個詞：das Wörterbuch 跟 das Buch。", "复合词看最后一个词：das Wörterbuch 跟 das Buch。", "Compound nouns take the gender of the final noun: das Wörterbuch follows das Buch.") }
-
-    private func value(_ traditional: String, _ simplified: String, _ english: String) -> String {
-        switch language {
-        case .traditionalChinese:
-            return traditional
-        case .simplifiedChinese:
-            return simplified
-        case .english:
-            return english
         }
     }
 }
