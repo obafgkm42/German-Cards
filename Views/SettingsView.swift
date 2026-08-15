@@ -342,7 +342,11 @@ struct SettingsView: View {
 
         for (index, card) in cards.enumerated() {
             do {
-                let refreshed = try await client.fetchWordInfo(word: card.word, configuration: config)
+                let refreshed = try await client.fetchWordInfo(
+                    word: card.word,
+                    configuration: config,
+                    requestedPartOfSpeech: card.partOfSpeech
+                )
                 if refreshed.isProbablyValid {
                     store.replace(original: card, with: refreshed)
                     updatedCount += 1

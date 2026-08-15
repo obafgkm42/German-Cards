@@ -118,7 +118,13 @@ struct GermanWordData: Codable, Identifiable, Hashable {
     // Bump this when generated card content changes enough to justify smart renewal.
     static let currentSchemaVersion = 5
 
-    var id: String { word.lowercased() }
+    // The same spelling can represent independent cards for different parts of speech.
+    var id: String {
+        let normalizedWord = word
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return "\(normalizedWord)::\(partOfSpeech.rawValue)"
+    }
     let word: String
     let meaning: String
     let englishMeaning: String?

@@ -7,6 +7,7 @@ enum WordLookupError: LocalizedError {
     case decodingFailed
     case invalidAdditionalRequestBody
     case invalidWordSuggestion(String?)
+    case unexpectedPartOfSpeech(expected: PartOfSpeech, actual: PartOfSpeech)
 
     var errorDescription: String? {
         switch self {
@@ -25,25 +26,49 @@ enum WordLookupError: LocalizedError {
                 return "這看起來不像有效德語詞。你是不是想查：\(suggestion)？"
             }
             return "這看起來不像有效德語詞，請檢查拼寫。"
+        case .unexpectedPartOfSpeech(let expected, let actual):
+            return "要求查找 \(expected.label)，但模型返回了 \(actual.label)。請重試。"
         }
     }
 }
 
 final class LLMWordClient {
-    func fetchWordInfo(word: String, configuration: LLMConfiguration) async throws -> GermanWordData {
+    func fetchWordInfo(
+        word: String,
+        configuration: LLMConfiguration,
+        requestedPartOfSpeech: PartOfSpeech? = nil
+    ) async throws -> GermanWordData {
         guard configuration.isUsable else { throw WordLookupError.missingConfiguration }
 
         let result: GermanWordData
         switch configuration.provider {
         case .gemini:
-            result = try await fetchFromGemini(word: word, configuration: configuration)
+            result = try await fetchFromGemini(
+                word: word,
+                configuration: configuration,
+                requestedPartOfSpeech: requestedPartOfSpeech
+            )
         case .openAICompatible, .custom:
-            result = try await fetchFromChatCompletions(word: word, configuration: configuration)
+            result = try await fetchFromChatCompletions(
+                word: word,
+                configuration: configuration,
+                requestedPartOfSpeech: requestedPartOfSpeech
+            )
+        }
+        if let requestedPartOfSpeech, result.partOfSpeech != requestedPartOfSpeech {
+            throw WordLookupError.unexpectedPartOfSpeech(
+                expected: requestedPartOfSpeech,
+                actual: result.partOfSpeech
+            )
         }
         return applySource("LLM · \(configuration.model)", to: result)
     }
 
-    private func fetchFromChatCompletions(word: String, configuration: LLMConfiguration) async throws -> GermanWordData {
+    private func fetchFromChatCompletions(
+        word: String,
+        configuration: LLMConfiguration,
+        requestedPartOfSpeech: PartOfSpeech?
+    ) async throws -> GermanWordData {
         let endpoint = try endpointURL(baseURL: configuration.normalizedBaseURL, path: "chat/completions")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
@@ -54,7 +79,10 @@ final class LLMWordClient {
             model: configuration.model,
             messages: [
                 ChatMessage(role: "system", content: systemPrompt),
-                ChatMessage(role: "user", content: "Resolve this vocabulary query to the best German dictionary headword and build a card: \(word)")
+                ChatMessage(
+                    role: "user",
+                    content: lookupInstruction(for: word, requestedPartOfSpeech: requestedPartOfSpeech)
+                )
             ],
             temperature: 0.1,
             response_format: ResponseFormat(type: "json_object")
@@ -72,7 +100,11 @@ final class LLMWordClient {
         return try decodeWordData(from: text, fallbackWord: word)
     }
 
-    private func fetchFromGemini(word: String, configuration: LLMConfiguration) async throws -> GermanWordData {
+    private func fetchFromGemini(
+        word: String,
+        configuration: LLMConfiguration,
+        requestedPartOfSpeech: PartOfSpeech?
+    ) async throws -> GermanWordData {
         let endpoint = try endpointURL(baseURL: configuration.normalizedBaseURL, path: "models/\(configuration.model):generateContent")
         guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
             throw WordLookupError.invalidURL
@@ -83,8 +115,12 @@ final class LLMWordClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        let lookupText = lookupInstruction(
+            for: word,
+            requestedPartOfSpeech: requestedPartOfSpeech
+        )
         request.httpBody = try JSONEncoder().encode(GeminiRequest(contents: [
-            GeminiContent(parts: [GeminiPart(text: "\(systemPrompt)\n\nResolve this vocabulary query to the best German dictionary headword and build a card: \(word)")])
+            GeminiContent(parts: [GeminiPart(text: "\(systemPrompt)\n\n\(lookupText)")])
         ]))
 
         let (data, _) = try await URLSession.shared.data(for: request)
@@ -93,6 +129,18 @@ final class LLMWordClient {
             throw WordLookupError.emptyResponse
         }
         return try decodeWordData(from: text, fallbackWord: word)
+    }
+
+    private func lookupInstruction(
+        for word: String,
+        requestedPartOfSpeech: PartOfSpeech?
+    ) -> String {
+        let baseInstruction = "Resolve this vocabulary query to the best German dictionary headword and build a card: \(word)"
+        guard let requestedPartOfSpeech else { return baseInstruction }
+        return """
+        \(baseInstruction)
+        The user explicitly requests the \(requestedPartOfSpeech.rawValue) entry. If the spelling has entries with multiple parts of speech, return the \(requestedPartOfSpeech.rawValue) entry. The JSON partOfSpeech must be exactly "\(requestedPartOfSpeech.rawValue)"; do not substitute a different part of speech.
+        """
     }
 
     private func endpointURL(baseURL raw: String, path: String) throws -> URL {

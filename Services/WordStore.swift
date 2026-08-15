@@ -7,19 +7,24 @@ final class WordStore: ObservableObject {
     @Published private(set) var storageDescription = "Local dictionary"
 
     private let storageKey = "german_cards_history_v1"
+    private let userDefaults: UserDefaults
 
-    init() {
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
         load()
     }
 
     var count: Int { history.count }
 
-    func findCached(_ word: String) -> GermanWordData? {
+    func findCached(_ word: String, partOfSpeech: PartOfSpeech? = nil) -> GermanWordData? {
         let normalized = normalize(word)
         return history.first { card in
-            normalize(card.word) == normalized ||
-            matchesNounForm(card, normalized: normalized) ||
-            matchesTranslation(card, normalized: normalized)
+            guard partOfSpeech == nil || card.partOfSpeech == partOfSpeech else {
+                return false
+            }
+            return normalize(card.word) == normalized ||
+                matchesNounForm(card, normalized: normalized) ||
+                matchesTranslation(card, normalized: normalized)
         }
     }
 
@@ -66,21 +71,21 @@ final class WordStore: ObservableObject {
     }
 
     func save(_ data: GermanWordData) {
-        history.removeAll { normalize($0.word) == normalize(data.word) }
+        history.removeAll { $0.id == data.id }
         history.insert(data, at: 0)
         persist()
     }
 
     func replace(original: GermanWordData, with updated: GermanWordData) {
         history.removeAll { item in
-            normalize(item.word) == normalize(original.word) || normalize(item.word) == normalize(updated.word)
+            item.id == original.id || item.id == updated.id
         }
         history.insert(updated, at: 0)
         persist()
     }
 
     func delete(_ data: GermanWordData) {
-        history.removeAll { normalize($0.word) == normalize(data.word) }
+        history.removeAll { $0.id == data.id }
         persist()
     }
 
@@ -106,7 +111,7 @@ final class WordStore: ObservableObject {
     func importData(_ data: Data) throws -> Int {
         let cards = try decodeImportedCards(from: data)
         for card in cards {
-            history.removeAll { normalize($0.word) == normalize(card.word) }
+            history.removeAll { $0.id == card.id }
             history.append(card)
         }
         history.sort { $0.timestamp > $1.timestamp }
@@ -115,7 +120,7 @@ final class WordStore: ObservableObject {
     }
 
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: storageKey) else {
+        guard let data = userDefaults.data(forKey: storageKey) else {
             history = []
             storageDescription = "Local dictionary"
             return
@@ -128,7 +133,7 @@ final class WordStore: ObservableObject {
     private func persist() {
         // UserDefaults is the local store; export/import handles user-controlled sync.
         guard let data = try? JSONEncoder().encode(history) else { return }
-        UserDefaults.standard.set(data, forKey: storageKey)
+        userDefaults.set(data, forKey: storageKey)
         storageDescription = "Local dictionary"
     }
 

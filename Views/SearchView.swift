@@ -16,6 +16,7 @@ struct SearchView: View {
     @State private var showingLibrary = false
     @State private var normalizedLookupMessage: String?
     @State private var suggestion: WordSuggestion?
+    @State private var requestedPartOfSpeech: PartOfSpeech?
     @FocusState private var isSearchFocused: Bool
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -51,37 +52,56 @@ struct SearchView: View {
     }
 
     private var searchBar: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("German, English, or Chinese word", text: $query)
-                .focused($isSearchFocused)
-                .germanCardsAutocapitalization(.words)
-                .germanCardsSearchSubmitLabel()
-                .onSubmit { Task { await search() } }
-            if !query.isEmpty {
-                Button {
-                    query = ""
-                    suggestion = nil
-                    errorMessage = nil
-                    selectedWord = nil
-                    normalizedLookupMessage = nil
-                    isSearchFocused = true
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("German, English, or Chinese word", text: $query)
+                    .focused($isSearchFocused)
+                    .germanCardsAutocapitalization(.words)
+                    .germanCardsSearchSubmitLabel()
+                    .onSubmit { Task { await search() } }
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                        suggestion = nil
+                        errorMessage = nil
+                        selectedWord = nil
+                        normalizedLookupMessage = nil
+                        isSearchFocused = true
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                Button {
+                    Task { await search() }
+                } label: {
+                    Image(systemName: isLoading ? "hourglass" : "sparkles")
+                        .font(.headline)
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isLoading)
             }
-            Button {
-                Task { await search() }
-            } label: {
-                Image(systemName: isLoading ? "hourglass" : "sparkles")
-                    .font(.headline)
-                    .frame(width: 36, height: 36)
+
+            Divider()
+
+            HStack(spacing: 10) {
+                Label("Search as", systemImage: "tag")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.secondaryText)
+                Spacer()
+                Picker("Part of speech", selection: $requestedPartOfSpeech) {
+                    Text("Automatic").tag(nil as PartOfSpeech?)
+                    ForEach(PartOfSpeech.allCases) { option in
+                        Text(option.label).tag(Optional(option))
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(isLoading)
         }
         .padding(12)
         .background(AppTheme.elevatedSurface)
@@ -214,7 +234,7 @@ struct SearchView: View {
         errorMessage = nil
         suggestion = nil
         normalizedLookupMessage = nil
-        if let cached = store.findCached(term) {
+        if let cached = store.findCached(term, partOfSpeech: requestedPartOfSpeech) {
             selectedWord = cached
             updateNormalizedLookupMessage(input: term, result: cached)
             return
@@ -232,7 +252,11 @@ struct SearchView: View {
                 apiKey: apiKey,
                 additionalRequestBody: additionalRequestBody
             )
-            let result = try await client.fetchWordInfo(word: term, configuration: config)
+            let result = try await client.fetchWordInfo(
+                word: term,
+                configuration: config,
+                requestedPartOfSpeech: requestedPartOfSpeech
+            )
             guard result.isProbablyValid else {
                 suggestion = WordSuggestion(originalWord: term, suggestedWord: result.suggestedWord, confidence: result.confidence)
                 selectedWord = nil
