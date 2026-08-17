@@ -55,6 +55,7 @@ struct MacSearchField: NSViewRepresentable {
     func makeNSView(context: Context) -> NSSearchField {
         let searchField = NSSearchField()
         searchField.placeholderString = prompt
+        searchField.sendsWholeSearchString = true
         searchField.delegate = context.coordinator
         searchField.target = context.coordinator
         searchField.action = #selector(Coordinator.submit(_:))
