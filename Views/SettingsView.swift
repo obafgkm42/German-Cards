@@ -100,7 +100,7 @@ struct SettingsView: View {
 
                     SettingsSection(
                         title: "LLM Provider",
-                        footer: "OpenAI-compatible 和 Custom 會呼叫 {Base URL}/chat/completions。Gemini 會呼叫 {Base URL}/models/{model}:generateContent。"
+                        footer: "官方 OpenAI endpoint 和 Gemini 會使用 Structured Outputs；其他 compatible/custom endpoint 保留 JSON mode。所有回傳仍會在裝置端驗證。"
                     ) {
                         SettingsRow("Provider") {
                             Picker("Provider", selection: provider) {
@@ -144,7 +144,7 @@ struct SettingsView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.separator))
                                 .onChange(of: draftAdditionalRequestBody) { _, _ in configurationStatus = nil }
-                            Text("Optional JSON object for OpenAI-compatible and Custom providers. Values override the default request body, for example {\"temperature\":1}.")
+                            Text("Optional JSON object for OpenAI-compatible and Custom providers. Values override the default request body, including response_format, for example {\"temperature\":1}.")
                                 .font(.footnote)
                                 .foregroundStyle(AppTheme.secondaryText)
                         }

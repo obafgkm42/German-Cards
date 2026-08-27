@@ -91,7 +91,7 @@ final class LLMWordClient {
                 )
             ],
             temperature: 1.0,
-            response_format: ResponseFormat(type: "json_object")
+            response_format: configuration.chatResponseFormat
         )
         request.httpBody = try mergedRequestBody(
             body,
@@ -130,9 +130,14 @@ final class LLMWordClient {
             for: word,
             requestedPartOfSpeech: requestedPartOfSpeech
         )
-        request.httpBody = try JSONEncoder().encode(GeminiRequest(contents: [
-            GeminiContent(parts: [GeminiPart(text: "\(systemPrompt)\n\n\(lookupText)")])
-        ]))
+        request.httpBody = try JSONEncoder().encode(
+            GeminiRequest(
+                contents: [
+                    GeminiContent(parts: [GeminiPart(text: "\(systemPrompt)\n\n\(lookupText)")])
+                ],
+                generationConfig: GeminiGenerationConfig()
+            )
+        )
 
         let data = try await responseData(for: request)
         let envelope: GeminiResponse
@@ -213,41 +218,29 @@ final class LLMWordClient {
         return try JSONSerialization.data(withJSONObject: requestObject)
     }
 
-    private func decodeWordData(from rawText: String, fallbackWord: String) throws -> GermanWordData {
+    func decodeWordData(from rawText: String, fallbackWord: String) throws -> GermanWordData {
         let cleaned = rawText
             .replacingOccurrences(of: "```json", with: "")
             .replacingOccurrences(of: "```", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard let data = cleaned.data(using: .utf8) else { throw WordLookupError.decodingFailed }
-        var decoded = try JSONDecoder().decode(LLMWordPayload.self, from: data).toGermanWordData()
-        if decoded.word.isEmpty {
-            decoded = GermanWordData(
-                word: fallbackWord,
-                meaning: decoded.meaning,
-                englishMeaning: decoded.englishMeaning,
-                partOfSpeech: decoded.partOfSpeech,
-                gender: decoded.gender,
-                pluralForm: decoded.pluralForm,
-                declensionTable: decoded.declensionTable,
-                verbConjugation: decoded.verbConjugation,
-                adjectiveComparison: decoded.adjectiveComparison,
-                exampleSentence: decoded.exampleSentence,
-                exampleTranslation: decoded.exampleTranslation,
-                referenceSource: decoded.referenceSource,
-                notes: decoded.notes,
-                isValidGermanWord: decoded.isValidGermanWord,
-                suggestedWord: decoded.suggestedWord,
-                confidence: decoded.confidence,
-                schemaVersion: GermanWordData.currentSchemaVersion,
-                timestamp: decoded.timestamp
-            )
+        do {
+            let object = try JSONSerialization.jsonObject(with: data)
+            guard LLMWordCardSchema.make(includePropertyOrdering: false).validates(object) else {
+                throw WordLookupError.decodingFailed
+            }
+            return try JSONDecoder()
+                .decode(LLMWordPayload.self, from: data)
+                .validatedWordData(fallbackWord: fallbackWord)
+        } catch let error as WordLookupError {
+            throw error
+        } catch {
+            throw WordLookupError.decodingFailed
         }
-        return decoded
     }
 
-
     private func applySource(_ source: String, to data: GermanWordData) -> GermanWordData {
-        GermanWordData(
+        return GermanWordData(
             word: data.word,
             meaning: data.meaning,
             englishMeaning: data.englishMeaning,
@@ -307,38 +300,50 @@ final class LLMWordClient {
 }
 
 private struct LLMWordPayload: Decodable {
-    let word: String?
-    let meaning: String?
+    let word: String
+    let meaning: String
     let englishMeaning: String?
-    let partOfSpeech: PartOfSpeech?
-    let gender: String?
-    let pluralForm: String?
-    let declensionTable: [DeclensionRow]?
-    let verbConjugation: [VerbConjugationRow]?
+    let partOfSpeech: PartOfSpeech
+    let gender: GrammaticalGender
+    let pluralForm: String
+    let declensionTable: [DeclensionRow]
+    let verbConjugation: [VerbConjugationRow]
     let adjectiveComparison: AdjectiveComparison?
-    let exampleSentence: String?
-    let exampleTranslation: String?
-    let referenceSource: String?
-    let notes: [String]?
-    let isValidGermanWord: Bool?
+    let exampleSentence: String
+    let exampleTranslation: String
+    let referenceSource: String
+    let notes: [String]
+    let isValidGermanWord: Bool
     let suggestedWord: String?
-    let confidence: Double?
+    let confidence: Double
 
-    func toGermanWordData() -> GermanWordData {
-        GermanWordData(
-            word: word ?? "",
-            meaning: meaning ?? "-",
+    func validatedWordData(fallbackWord: String) throws -> GermanWordData {
+        guard confidence.isFinite, (0...1).contains(confidence) else {
+            throw WordLookupError.decodingFailed
+        }
+
+        let trimmedWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isValidGermanWord {
+            let requiredCardText = [trimmedWord, meaning, exampleSentence, exampleTranslation]
+            guard requiredCardText.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+                throw WordLookupError.decodingFailed
+            }
+        }
+
+        return GermanWordData(
+            word: trimmedWord.isEmpty ? fallbackWord : trimmedWord,
+            meaning: meaning,
             englishMeaning: englishMeaning,
-            partOfSpeech: partOfSpeech ?? .other,
-            gender: GrammaticalGender(rawValue: gender ?? "none") ?? .none,
-            pluralForm: pluralForm ?? "-",
-            declensionTable: declensionTable ?? [],
+            partOfSpeech: partOfSpeech,
+            gender: gender,
+            pluralForm: pluralForm,
+            declensionTable: declensionTable,
             verbConjugation: verbConjugation,
             adjectiveComparison: adjectiveComparison,
-            exampleSentence: exampleSentence ?? "-",
-            exampleTranslation: exampleTranslation ?? "-",
-            referenceSource: referenceSource ?? "LLM generated",
-            notes: notes ?? [],
+            exampleSentence: exampleSentence,
+            exampleTranslation: exampleTranslation,
+            referenceSource: referenceSource,
+            notes: notes,
             isValidGermanWord: isValidGermanWord,
             suggestedWord: suggestedWord,
             confidence: confidence,
@@ -352,16 +357,12 @@ private struct ChatCompletionRequest: Encodable {
     let model: String
     let messages: [ChatMessage]
     let temperature: Double
-    let response_format: ResponseFormat
+    let response_format: ChatResponseFormat
 }
 
 private struct ChatMessage: Codable {
     let role: String
     let content: String
-}
-
-private struct ResponseFormat: Encodable {
-    let type: String
 }
 
 private struct ChatCompletionResponse: Decodable {
@@ -374,6 +375,7 @@ private struct ChatCompletionResponse: Decodable {
 
 private struct GeminiRequest: Encodable {
     let contents: [GeminiContent]
+    let generationConfig: GeminiGenerationConfig
 }
 
 private struct GeminiContent: Codable {

@@ -24,6 +24,8 @@
 				Config/Signing.example.xcconfig,
 				Config/Signing.local.xcconfig,
 				Config/Signing.xcconfig,
+				Tests/LLMStructuredOutputTests.swift,
+				Tests/run-structured-output-tests.sh,
 				docs/images/demo_desktop.png,
 				docs/images/demo_mobile.png,
 				LICENSE,
