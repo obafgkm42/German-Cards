@@ -4,9 +4,15 @@ import Foundation
 struct LLMStructuredOutputTests {
     static func main() throws {
         try testOpenAIStructuredOutputFormat()
+        try testOfficialOpenAIConfigurationUsesStructuredOutputs()
         try testCustomJSONModeFormat()
         try testUnknownOpenAICompatibleProviderUsesJSONMode()
+        try testUnsupportedStructuredOutputsErrorAllowsFallback()
+        try testUnrelatedProviderErrorDoesNotAllowFallback()
+        try testResponseFormatOverrideDisablesFallback()
         try testGeminiStructuredOutputFormat()
+        try testChatCompletionContentDecodes()
+        try testChatCompletionRefusalProducesExplicitError()
         try testValidPayloadPassesClientValidation()
         try testUnknownPropertyFailsClientValidation()
         try testMissingPropertyFailsClientValidation()
@@ -28,6 +34,14 @@ struct LLMStructuredOutputTests {
         try expect((schema["required"] as? [String])?.count == 16, "all card fields should be required")
     }
 
+    private static func testOfficialOpenAIConfigurationUsesStructuredOutputs() throws {
+        let configuration = makeConfiguration(
+            baseURL: "API.OPENAI.COM/v1/chat/completions/"
+        )
+        let object = try encodedObject(configuration.chatResponseFormat)
+        try expect(object["type"] as? String == "json_schema", "official OpenAI should use Structured Outputs")
+    }
+
     private static func testCustomJSONModeFormat() throws {
         let object = try encodedObject(ChatResponseFormat.jsonObject)
         try expect(object["type"] as? String == "json_object", "Custom should retain JSON mode")
@@ -35,15 +49,48 @@ struct LLMStructuredOutputTests {
     }
 
     private static func testUnknownOpenAICompatibleProviderUsesJSONMode() throws {
-        let configuration = LLMConfiguration(
-            provider: .openAICompatible,
-            baseURL: "https://provider.example/v1",
-            model: "example-model",
-            apiKey: "test-key",
-            additionalRequestBody: ""
-        )
+        let configuration = makeConfiguration(baseURL: "https://provider.example/v1")
         let object = try encodedObject(configuration.chatResponseFormat)
         try expect(object["type"] as? String == "json_object", "unknown compatible providers should retain JSON mode")
+    }
+
+    private static func testUnsupportedStructuredOutputsErrorAllowsFallback() throws {
+        let configuration = makeConfiguration(baseURL: "https://api.openai.com/v1")
+        let error = WordLookupError.providerRejectedRequest(
+            statusCode: 400,
+            message: "response_format json_schema is not supported with this model"
+        )
+        try expect(
+            configuration.shouldFallbackToJSONMode(after: error),
+            "unsupported Structured Outputs should retry with JSON mode"
+        )
+    }
+
+    private static func testUnrelatedProviderErrorDoesNotAllowFallback() throws {
+        let configuration = makeConfiguration(baseURL: "https://api.openai.com/v1")
+        let error = WordLookupError.providerRejectedRequest(
+            statusCode: 400,
+            message: "invalid temperature"
+        )
+        try expect(
+            !configuration.shouldFallbackToJSONMode(after: error),
+            "unrelated provider errors should not trigger a retry"
+        )
+    }
+
+    private static func testResponseFormatOverrideDisablesFallback() throws {
+        let configuration = makeConfiguration(
+            baseURL: "https://api.openai.com/v1",
+            additionalRequestBody: #"{"response_format":{"type":"json_object"}}"#
+        )
+        let error = WordLookupError.providerRejectedRequest(
+            statusCode: 400,
+            message: "response_format is not supported"
+        )
+        try expect(
+            !configuration.shouldFallbackToJSONMode(after: error),
+            "the app should not override an explicit response_format"
+        )
     }
 
     private static func testGeminiStructuredOutputFormat() throws {
@@ -53,6 +100,22 @@ struct LLMStructuredOutputTests {
         let schema = try objectValue(object["responseJsonSchema"], name: "responseJsonSchema")
         let required = schema["required"] as? [String]
         try expect(schema["propertyOrdering"] as? [String] == required, "Gemini should receive explicit property ordering")
+    }
+
+    private static func testChatCompletionContentDecodes() throws {
+        let data = Data(#"{"choices":[{"message":{"content":"{}","refusal":null}}]}"#.utf8)
+        let content = try LLMWordClient().decodeChatCompletionContent(from: data)
+        try expect(content == "{}", "chat completion content should decode")
+    }
+
+    private static func testChatCompletionRefusalProducesExplicitError() throws {
+        let data = Data(#"{"choices":[{"message":{"content":null,"refusal":"Unable to comply"}}]}"#.utf8)
+        do {
+            _ = try LLMWordClient().decodeChatCompletionContent(from: data)
+            throw TestFailure("refusal should fail explicitly")
+        } catch WordLookupError.providerRefusedResponse(let message) {
+            try expect(message == "Unable to comply", "refusal message should be preserved")
+        }
     }
 
     private static func testValidPayloadPassesClientValidation() throws {
@@ -108,6 +171,19 @@ struct LLMStructuredOutputTests {
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
         guard condition() else { throw TestFailure(message) }
+    }
+
+    private static func makeConfiguration(
+        baseURL: String,
+        additionalRequestBody: String = ""
+    ) -> LLMConfiguration {
+        LLMConfiguration(
+            provider: .openAICompatible,
+            baseURL: baseURL,
+            model: "example-model",
+            apiKey: "test-key",
+            additionalRequestBody: additionalRequestBody
+        )
     }
 
     private static let validPayload = #"""

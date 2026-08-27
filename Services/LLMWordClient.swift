@@ -7,6 +7,7 @@ enum WordLookupError: LocalizedError {
     case decodingFailed
     case invalidAdditionalRequestBody
     case providerRejectedRequest(statusCode: Int, message: String?)
+    case providerRefusedResponse(String?)
     case invalidWordSuggestion(String?)
     case unexpectedPartOfSpeech(expected: PartOfSpeech, actual: PartOfSpeech)
 
@@ -27,6 +28,11 @@ enum WordLookupError: LocalizedError {
                 return "Provider 拒絕了請求（HTTP \(statusCode)）：\(message)"
             }
             return "Provider 拒絕了請求（HTTP \(statusCode)）。請檢查 Settings 裡的 endpoint、model 和 API key。"
+        case .providerRefusedResponse(let message):
+            if let message, !message.isEmpty {
+                return "Provider 拒絕生成這張卡片：\(message)"
+            }
+            return "Provider 拒絕生成這張卡片。"
         case .invalidWordSuggestion(let suggestion):
             if let suggestion, !suggestion.isEmpty {
                 return "這看起來不像有效德語詞。你是不是想查：\(suggestion)？"
@@ -75,6 +81,31 @@ final class LLMWordClient {
         configuration: LLMConfiguration,
         requestedPartOfSpeech: PartOfSpeech?
     ) async throws -> GermanWordData {
+        let preferredFormat = configuration.chatResponseFormat
+        do {
+            return try await performChatCompletionLookup(
+                word: word,
+                configuration: configuration,
+                requestedPartOfSpeech: requestedPartOfSpeech,
+                responseFormat: preferredFormat
+            )
+        } catch {
+            guard configuration.shouldFallbackToJSONMode(after: error) else { throw error }
+            return try await performChatCompletionLookup(
+                word: word,
+                configuration: configuration,
+                requestedPartOfSpeech: requestedPartOfSpeech,
+                responseFormat: .jsonObject
+            )
+        }
+    }
+
+    private func performChatCompletionLookup(
+        word: String,
+        configuration: LLMConfiguration,
+        requestedPartOfSpeech: PartOfSpeech?,
+        responseFormat: ChatResponseFormat
+    ) async throws -> GermanWordData {
         let endpoint = try endpointURL(baseURL: configuration.normalizedBaseURL, path: "chat/completions")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
@@ -84,14 +115,14 @@ final class LLMWordClient {
         let body = ChatCompletionRequest(
             model: configuration.model,
             messages: [
-                ChatMessage(role: "system", content: systemPrompt),
-                ChatMessage(
+                ChatRequestMessage(role: "system", content: systemPrompt),
+                ChatRequestMessage(
                     role: "user",
                     content: lookupInstruction(for: word, requestedPartOfSpeech: requestedPartOfSpeech)
                 )
             ],
             temperature: 1.0,
-            response_format: configuration.chatResponseFormat
+            response_format: responseFormat
         )
         request.httpBody = try mergedRequestBody(
             body,
@@ -99,15 +130,7 @@ final class LLMWordClient {
         )
 
         let data = try await responseData(for: request)
-        let envelope: ChatCompletionResponse
-        do {
-            envelope = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
-        } catch {
-            throw WordLookupError.decodingFailed
-        }
-        guard let text = envelope.choices.first?.message.content, !text.isEmpty else {
-            throw WordLookupError.emptyResponse
-        }
+        let text = try decodeChatCompletionContent(from: data)
         return try decodeWordData(from: text, fallbackWord: word)
     }
 
@@ -239,6 +262,26 @@ final class LLMWordClient {
         }
     }
 
+    func decodeChatCompletionContent(from data: Data) throws -> String {
+        let envelope: ChatCompletionResponse
+        do {
+            envelope = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
+        } catch {
+            throw WordLookupError.decodingFailed
+        }
+
+        guard let message = envelope.choices.first?.message else {
+            throw WordLookupError.emptyResponse
+        }
+        if let refusal = message.refusal {
+            throw WordLookupError.providerRefusedResponse(refusal)
+        }
+        guard let content = message.content, !content.isEmpty else {
+            throw WordLookupError.emptyResponse
+        }
+        return content
+    }
+
     private func applySource(_ source: String, to data: GermanWordData) -> GermanWordData {
         return GermanWordData(
             word: data.word,
@@ -355,12 +398,12 @@ private struct LLMWordPayload: Decodable {
 
 private struct ChatCompletionRequest: Encodable {
     let model: String
-    let messages: [ChatMessage]
+    let messages: [ChatRequestMessage]
     let temperature: Double
     let response_format: ChatResponseFormat
 }
 
-private struct ChatMessage: Codable {
+private struct ChatRequestMessage: Encodable {
     let role: String
     let content: String
 }
@@ -369,7 +412,12 @@ private struct ChatCompletionResponse: Decodable {
     let choices: [Choice]
 
     struct Choice: Decodable {
-        let message: ChatMessage
+        let message: ResponseMessage
+    }
+
+    struct ResponseMessage: Decodable {
+        let content: String?
+        let refusal: String?
     }
 }
 

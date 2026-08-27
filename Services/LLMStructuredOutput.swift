@@ -212,7 +212,7 @@ final class JSONSchema: Encodable {
     }
 }
 
-enum ChatResponseFormat: Encodable {
+enum ChatResponseFormat: Encodable, Equatable {
     case structuredOutputs
     case jsonObject
 
@@ -261,5 +261,32 @@ extension LLMConfiguration {
             return .jsonObject
         }
         return .structuredOutputs
+    }
+
+    func shouldFallbackToJSONMode(after error: Error) -> Bool {
+        guard chatResponseFormat == .structuredOutputs,
+              !hasExplicitResponseFormatOverride,
+              case WordLookupError.providerRejectedRequest(let statusCode, let message) = error,
+              statusCode == 400 || statusCode == 422,
+              let normalizedMessage = message?.lowercased()
+        else {
+            return false
+        }
+
+        return normalizedMessage.contains("response_format") ||
+            normalizedMessage.contains("json_schema") ||
+            normalizedMessage.contains("structured output")
+    }
+
+    private var hasExplicitResponseFormatOverride: Bool {
+        let trimmedBody = additionalRequestBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard
+            !trimmedBody.isEmpty,
+            let data = trimmedBody.data(using: .utf8),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return false
+        }
+        return object.keys.contains("response_format")
     }
 }

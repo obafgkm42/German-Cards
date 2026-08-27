@@ -100,7 +100,7 @@ struct SettingsView: View {
 
                     SettingsSection(
                         title: "LLM Provider",
-                        footer: "官方 OpenAI endpoint 和 Gemini 會使用 Structured Outputs；其他 compatible/custom endpoint 保留 JSON mode。所有回傳仍會在裝置端驗證。"
+                        footer: "官方 OpenAI endpoint 會優先使用 Structured Outputs，若 model 不支援則自動回退 JSON mode；Gemini 使用 Structured Outputs。其他 compatible/custom endpoint 保留 JSON mode，所有回傳仍會在裝置端驗證。"
                     ) {
                         SettingsRow("Provider") {
                             Picker("Provider", selection: provider) {
